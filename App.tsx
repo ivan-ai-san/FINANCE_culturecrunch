@@ -186,19 +186,17 @@ const App: React.FC = () => {
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-teal-400 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-gradient-to-tr from-blue-600 to-teal-400 rounded-lg flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-lg">C</span>
             </div>
-            <div className="flex flex-col">
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 leading-none">
-                Culture Crunch
-              </h1>
-              <span className={`text-[10px] font-medium flex items-center gap-1 mt-0.5 ${isLoggedIn ? 'text-emerald-600' : 'text-slate-400'}`}>
-                {isLoggedIn ? <ShieldCheck size={10} /> : <CloudOff size={10} />}
-                {isLoggedIn ? 'Connected to Google Sheets' : 'Local / Demo Mode'}
-              </span>
-            </div>
+            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 whitespace-nowrap">
+              Culture Crunch
+            </h1>
+            <span className={`hidden sm:flex text-[10px] font-medium items-center gap-1 px-2 py-1 rounded-full whitespace-nowrap ${isLoggedIn ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 bg-slate-100'}`}>
+              {isLoggedIn ? <ShieldCheck size={10} /> : <CloudOff size={10} />}
+              {isLoggedIn ? 'Google Sheets' : 'Local Mode'}
+            </span>
           </div>
           
           <div className="flex items-center gap-2">
