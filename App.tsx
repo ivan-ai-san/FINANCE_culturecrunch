@@ -15,12 +15,17 @@ const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
   // Initialize auth and data
   useEffect(() => {
     const authenticated = initAuth();
     setIsLoggedIn(authenticated);
     setUserEmail(getUserEmail());
-    loadData();
+    setIsCheckingAuth(false);
+    if (authenticated) {
+      loadData();
+    }
   }, []);
 
   // Sync to local storage as backup/cache
@@ -32,16 +37,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     try {
       const data = await fetchTransactions();
-      if (data && data.length > 0) {
-          setTransactions(data);
-      } else if (!isAuthenticated()) {
-          // Only seed if not authenticated and empty
-           const seed: Transaction[] = [
-            { id: '1', date: '2023-10-15', description: 'Seed Funding', amount: 50000, type: 'INCOME' as any, category: 'Grants (R&D / EMDG)', hasGST: false, gstAmount: 0 },
-            { id: '2', date: '2023-10-20', description: 'MacBook Pro', amount: 3500, type: 'EXPENSE' as any, category: 'Equipment', hasGST: true, gstAmount: 318.18 },
-        ];
-        setTransactions(seed);
-      }
+      setTransactions(data || []);
     } catch (e) {
       console.error("Failed to load data", e);
     } finally {
@@ -85,6 +81,54 @@ const App: React.FC = () => {
         console.error("Failed to delete from sheet", e);
     }
   };
+
+  // Show loading while checking auth
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-teal-400 rounded-xl flex items-center justify-center mx-auto mb-4">
+            <span className="text-white font-bold text-2xl">C</span>
+          </div>
+          <p className="text-slate-500">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login screen if not authenticated
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+            <div className="w-16 h-16 bg-gradient-to-tr from-blue-600 to-teal-400 rounded-xl flex items-center justify-center mx-auto mb-6">
+              <span className="text-white font-bold text-3xl">C</span>
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-2">Culture Crunch</h1>
+            <p className="text-slate-500 mb-8">Financial insights for your business</p>
+
+            <button
+              onClick={handleLogin}
+              className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-blue-600 text-white font-medium rounded-xl hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/25"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
+              Sign in with Google
+            </button>
+
+            <p className="mt-6 text-xs text-slate-400">
+              Only available for @culturecrunch.io accounts
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
