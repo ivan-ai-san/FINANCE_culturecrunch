@@ -4,22 +4,22 @@ import { Dashboard } from './components/Dashboard';
 import { TransactionForm } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
 import { FinancialCoach } from './components/FinancialCoach';
-import { LayoutDashboard, Receipt, Sparkles, PlusCircle, ShieldCheck, CloudOff } from 'lucide-react';
-import { fetchTransactions, addTransactionToSheet, deleteTransactionFromSheet } from './services/sheetService';
+import { LayoutDashboard, Receipt, Sparkles, PlusCircle, ShieldCheck, CloudOff, LogIn, LogOut, User } from 'lucide-react';
+import { fetchTransactions, addTransactionToSheet, deleteTransactionFromSheet, initAuth, isAuthenticated, getUserEmail, login, logout } from './services/sheetService';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'coach'>('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInternal, setIsInternal] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  // Initialize data
+  // Initialize auth and data
   useEffect(() => {
-    // Check environment
-    if (typeof window !== 'undefined' && window.google?.script?.run) {
-        setIsInternal(true);
-    }
+    const authenticated = initAuth();
+    setIsLoggedIn(authenticated);
+    setUserEmail(getUserEmail());
     loadData();
   }, []);
 
@@ -34,8 +34,8 @@ const App: React.FC = () => {
       const data = await fetchTransactions();
       if (data && data.length > 0) {
           setTransactions(data);
-      } else if (!isInternal) {
-          // Only seed if local dev and empty
+      } else if (!isAuthenticated()) {
+          // Only seed if not authenticated and empty
            const seed: Transaction[] = [
             { id: '1', date: '2023-10-15', description: 'Seed Funding', amount: 50000, type: 'INCOME' as any, category: 'Grants (R&D / EMDG)', hasGST: false, gstAmount: 0 },
             { id: '2', date: '2023-10-20', description: 'MacBook Pro', amount: 3500, type: 'EXPENSE' as any, category: 'Equipment', hasGST: true, gstAmount: 318.18 },
@@ -47,6 +47,17 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleLogin = () => {
+    login();
+  };
+
+  const handleLogout = () => {
+    logout();
+    setIsLoggedIn(false);
+    setUserEmail(null);
+    setTransactions([]);
   };
 
   const handleAddTransaction = async (t: Transaction) => {
@@ -88,9 +99,9 @@ const App: React.FC = () => {
               <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 leading-none">
                 Culture Crunch
               </h1>
-              <span className={`text-[10px] font-medium flex items-center gap-1 mt-0.5 ${isInternal ? 'text-emerald-600' : 'text-slate-400'}`}>
-                {isInternal ? <ShieldCheck size={10} /> : <CloudOff size={10} />} 
-                {isInternal ? 'Internal Secure Mode' : 'Local / Demo Mode'}
+              <span className={`text-[10px] font-medium flex items-center gap-1 mt-0.5 ${isLoggedIn ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {isLoggedIn ? <ShieldCheck size={10} /> : <CloudOff size={10} />}
+                {isLoggedIn ? 'Connected to Google Sheets' : 'Local / Demo Mode'}
               </span>
             </div>
           </div>
@@ -109,7 +120,7 @@ const App: React.FC = () => {
               >
                   Transactions
               </button>
-              <button 
+              <button
                   onClick={() => setActiveTab('coach')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'coach' ? 'bg-teal-50 text-teal-700' : 'text-slate-500 hover:text-slate-700'}`}
               >
@@ -117,6 +128,33 @@ const App: React.FC = () => {
                   AI Coach
               </button>
             </nav>
+
+            {/* Auth Button */}
+            <div className="ml-4 pl-4 border-l border-slate-200">
+              {isLoggedIn ? (
+                <div className="flex items-center gap-3">
+                  <div className="hidden sm:flex items-center gap-2 text-sm text-slate-600">
+                    <User size={14} />
+                    <span className="max-w-[150px] truncate">{userEmail}</span>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
+                  >
+                    <LogOut size={16} />
+                    <span className="hidden sm:inline">Sign Out</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleLogin}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                >
+                  <LogIn size={16} />
+                  Sign in with Google
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -171,7 +209,14 @@ const App: React.FC = () => {
 
                 {isLoading && (
                   <div className="p-4 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center gap-2 animate-pulse">
-                    <ShieldCheck size={16} /> Authenticating & Syncing...
+                    <ShieldCheck size={16} /> {isLoggedIn ? 'Syncing with Google Sheets...' : 'Loading...'}
+                  </div>
+                )}
+
+                {!isLoggedIn && !isLoading && (
+                  <div className="p-4 bg-amber-50 text-amber-700 rounded-xl flex items-center justify-center gap-2">
+                    <CloudOff size={16} />
+                    <span>You're in demo mode. <button onClick={handleLogin} className="underline font-medium hover:text-amber-900">Sign in with Google</button> to sync with your spreadsheet.</span>
                   </div>
                 )}
                 
