@@ -23,6 +23,20 @@ export const INCOME_CATEGORIES = [
   'Other'
 ];
 
+export const SUBSCRIPTION_CATEGORIES = [
+  'Software & Tools',
+  'Cloud Services',
+  'Communication',
+  'Design & Creative',
+  'Marketing',
+  'HR & Payroll',
+  'Accounting',
+  'Hosting',
+  'Domain & DNS',
+  'Security',
+  'Other'
+];
+
 // The Culture Crunch Persona System Instruction
 export const CULTURE_CRUNCH_SYSTEM_INSTRUCTION = `
 You are the Culture Crunch AI Coach. You do not replace reflection; you enable it. 

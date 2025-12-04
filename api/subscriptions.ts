@@ -1,20 +1,21 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const SHEET_ID = process.env.GOOGLE_SHEET_ID;
-const SHEET_RANGE = 'Transactions!A:H'; // Adjust based on your sheet structure
+const SHEET_RANGE = 'Subscriptions!A:K';
+const EXPECTED_HEADERS = ['ID', 'Name', 'Amount', 'Frequency', 'Category', 'StartDate', 'ProjectionMonths', 'HasGST', 'GSTAmount', 'IsActive', 'UpdatedAt'];
 
-interface Transaction {
+interface Subscription {
   id: string;
-  date: string;
-  description: string;
+  name: string;
   amount: number;
-  type: 'INCOME' | 'EXPENSE';
+  frequency: 'MONTHLY' | 'ANNUAL';
   category: string;
+  startDate: string;
+  projectionMonths: number;
   hasGST: boolean;
   gstAmount: number;
+  isActive: boolean;
 }
-
-const EXPECTED_HEADERS = ['ID', 'Date', 'Description', 'Amount', 'Type', 'Category', 'HasGST', 'GSTAmount'];
 
 async function refreshAccessToken(refreshToken: string): Promise<string | null> {
   try {
@@ -35,19 +36,19 @@ async function refreshAccessToken(refreshToken: string): Promise<string | null> 
   }
 }
 
-async function ensureTransactionsSheet(accessToken: string): Promise<void> {
-  // Check if Transactions sheet exists
+async function ensureSubscriptionsSheet(accessToken: string): Promise<void> {
+  // Check if Subscriptions sheet exists
   const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
   const metaResponse = await fetch(metaUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const metaData = await metaResponse.json();
 
-  const hasTransactionsSheet = metaData.sheets?.some(
-    (s: any) => s.properties?.title === 'Transactions'
+  const hasSubscriptionsSheet = metaData.sheets?.some(
+    (s: any) => s.properties?.title === 'Subscriptions'
   );
 
-  if (!hasTransactionsSheet) {
+  if (!hasSubscriptionsSheet) {
     // Create the sheet
     const createUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
     await fetch(createUrl, {
@@ -59,14 +60,14 @@ async function ensureTransactionsSheet(accessToken: string): Promise<void> {
       body: JSON.stringify({
         requests: [{
           addSheet: {
-            properties: { title: 'Transactions' }
+            properties: { title: 'Subscriptions' }
           }
         }]
       }),
     });
 
     // Add header row
-    const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Transactions!A1:H1?valueInputOption=USER_ENTERED`;
+    const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Subscriptions!A1:K1?valueInputOption=USER_ENTERED`;
     await fetch(headerUrl, {
       method: 'PUT',
       headers: {
@@ -79,7 +80,7 @@ async function ensureTransactionsSheet(accessToken: string): Promise<void> {
     });
   } else {
     // Check if headers exist and match expected structure
-    const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Transactions!A1:H1`;
+    const headerUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Subscriptions!A1:K1`;
     const headerResponse = await fetch(headerUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -88,7 +89,7 @@ async function ensureTransactionsSheet(accessToken: string): Promise<void> {
 
     // If no headers or headers don't match, set them
     if (existingHeaders.length === 0 || existingHeaders[0] !== 'ID') {
-      const setHeaderUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Transactions!A1:H1?valueInputOption=USER_ENTERED`;
+      const setHeaderUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Subscriptions!A1:K1?valueInputOption=USER_ENTERED`;
       await fetch(setHeaderUrl, {
         method: 'PUT',
         headers: {
@@ -103,8 +104,8 @@ async function ensureTransactionsSheet(accessToken: string): Promise<void> {
   }
 }
 
-async function getTransactions(accessToken: string): Promise<Transaction[]> {
-  await ensureTransactionsSheet(accessToken);
+async function getSubscriptions(accessToken: string): Promise<Subscription[]> {
+  await ensureSubscriptionsSheet(accessToken);
 
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}`;
 
@@ -119,31 +120,37 @@ async function getTransactions(accessToken: string): Promise<Transaction[]> {
   const data = await response.json();
   const rows = data.values || [];
 
-  // Skip header row, map to Transaction objects
   return rows.slice(1).map((row: string[]) => ({
     id: row[0] || '',
-    date: row[1] || '',
-    description: row[2] || '',
-    amount: parseFloat(row[3]) || 0,
-    type: row[4] as 'INCOME' | 'EXPENSE',
-    category: row[5] || '',
-    hasGST: row[6]?.toLowerCase() === 'true',
-    gstAmount: parseFloat(row[7]) || 0,
+    name: row[1] || '',
+    amount: parseFloat(row[2]) || 0,
+    frequency: row[3] as 'MONTHLY' | 'ANNUAL',
+    category: row[4] || '',
+    startDate: row[5] || '',
+    projectionMonths: parseInt(row[6]) || 12,
+    hasGST: row[7]?.toLowerCase() === 'true',
+    gstAmount: parseFloat(row[8]) || 0,
+    isActive: row[9]?.toLowerCase() !== 'false',
   }));
 }
 
-async function addTransaction(accessToken: string, transaction: Transaction): Promise<void> {
+async function addSubscription(accessToken: string, subscription: Subscription): Promise<void> {
+  await ensureSubscriptionsSheet(accessToken);
+
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}:append?valueInputOption=USER_ENTERED`;
 
   const row = [
-    transaction.id,
-    transaction.date,
-    transaction.description,
-    transaction.amount,
-    transaction.type,
-    transaction.category,
-    transaction.hasGST,
-    transaction.gstAmount,
+    subscription.id,
+    subscription.name,
+    subscription.amount,
+    subscription.frequency,
+    subscription.category,
+    subscription.startDate,
+    subscription.projectionMonths,
+    subscription.hasGST,
+    subscription.gstAmount,
+    subscription.isActive,
+    new Date().toISOString(),
   ];
 
   const response = await fetch(url, {
@@ -156,31 +163,68 @@ async function addTransaction(accessToken: string, transaction: Transaction): Pr
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to add transaction: ${response.status}`);
+    throw new Error(`Failed to add subscription: ${response.status}`);
   }
 }
 
-async function deleteTransaction(accessToken: string, id: string): Promise<void> {
-  // First, find the row with this ID
-  const transactions = await getTransactions(accessToken);
-  const rowIndex = transactions.findIndex(t => t.id === id);
+async function updateSubscription(accessToken: string, id: string, updates: Partial<Subscription>): Promise<void> {
+  const subscriptions = await getSubscriptions(accessToken);
+  const rowIndex = subscriptions.findIndex(s => s.id === id);
 
   if (rowIndex === -1) {
-    throw new Error('Transaction not found');
+    throw new Error('Subscription not found');
   }
 
-  // Row index in sheet (add 2: 1 for header, 1 for 0-based to 1-based)
+  const updated = { ...subscriptions[rowIndex], ...updates };
   const sheetRowIndex = rowIndex + 2;
 
-  // Get sheet ID (not spreadsheet ID)
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/Subscriptions!A${sheetRowIndex}:K${sheetRowIndex}?valueInputOption=USER_ENTERED`;
+
+  const row = [
+    updated.id,
+    updated.name,
+    updated.amount,
+    updated.frequency,
+    updated.category,
+    updated.startDate,
+    updated.projectionMonths,
+    updated.hasGST,
+    updated.gstAmount,
+    updated.isActive,
+    new Date().toISOString(),
+  ];
+
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ values: [row] }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update subscription: ${response.status}`);
+  }
+}
+
+async function deleteSubscription(accessToken: string, id: string): Promise<void> {
+  const subscriptions = await getSubscriptions(accessToken);
+  const rowIndex = subscriptions.findIndex(s => s.id === id);
+
+  if (rowIndex === -1) {
+    throw new Error('Subscription not found');
+  }
+
+  const sheetRowIndex = rowIndex + 2;
+
   const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}`;
   const metaResponse = await fetch(metaUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   const metaData = await metaResponse.json();
-  const sheetGid = metaData.sheets?.find((s: any) => s.properties?.title === 'Transactions')?.properties?.sheetId || 0;
+  const sheetGid = metaData.sheets?.find((s: any) => s.properties?.title === 'Subscriptions')?.properties?.sheetId || 0;
 
-  // Delete the row
   const deleteUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}:batchUpdate`;
   const response = await fetch(deleteUrl, {
     method: 'POST',
@@ -203,12 +247,11 @@ async function deleteTransaction(accessToken: string, id: string): Promise<void>
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to delete transaction: ${response.status}`);
+    throw new Error(`Failed to delete subscription: ${response.status}`);
   }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Get access token from Authorization header
   const authHeader = req.headers.authorization;
   let accessToken = authHeader?.replace('Bearer ', '');
   const refreshToken = req.headers['x-refresh-token'] as string;
@@ -224,31 +267,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     switch (req.method) {
       case 'GET': {
-        const transactions = await getTransactions(accessToken);
-        return res.json(transactions);
+        const subscriptions = await getSubscriptions(accessToken);
+        return res.json(subscriptions);
       }
 
       case 'POST': {
-        const transaction = req.body as Transaction;
-        await addTransaction(accessToken, transaction);
+        const subscription = req.body as Subscription;
+        await addSubscription(accessToken, subscription);
+        return res.json({ success: true });
+      }
+
+      case 'PUT': {
+        const { id } = req.query;
+        if (!id || typeof id !== 'string') {
+          return res.status(400).json({ error: 'Subscription ID required' });
+        }
+        await updateSubscription(accessToken, id, req.body);
         return res.json({ success: true });
       }
 
       case 'DELETE': {
         const { id } = req.query;
         if (!id || typeof id !== 'string') {
-          return res.status(400).json({ error: 'Transaction ID required' });
+          return res.status(400).json({ error: 'Subscription ID required' });
         }
-        await deleteTransaction(accessToken, id);
+        await deleteSubscription(accessToken, id);
         return res.json({ success: true });
       }
 
       default:
-        res.setHeader('Allow', ['GET', 'POST', 'DELETE']);
+        res.setHeader('Allow', ['GET', 'POST', 'PUT', 'DELETE']);
         return res.status(405).json({ error: `Method ${req.method} not allowed` });
     }
   } catch (error: any) {
-    // If token expired, try to refresh
     if (error.message?.includes('401') && refreshToken) {
       const newToken = await refreshAccessToken(refreshToken);
       if (newToken) {
@@ -258,7 +309,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
     }
-    console.error('Transactions API error:', error);
+    console.error('Subscriptions API error:', error);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }

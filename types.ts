@@ -23,6 +23,24 @@ export interface FinancialSummary {
   gstPayable: number;
 }
 
+export enum BillingFrequency {
+  MONTHLY = 'MONTHLY',
+  ANNUAL = 'ANNUAL'
+}
+
+export interface Subscription {
+  id: string;
+  name: string;
+  amount: number;
+  frequency: BillingFrequency;
+  category: string;
+  startDate: string;
+  projectionMonths: number;
+  hasGST: boolean;
+  gstAmount: number;
+  isActive: boolean;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';

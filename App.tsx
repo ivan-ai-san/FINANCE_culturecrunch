@@ -1,16 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { Transaction } from './types';
+import { Transaction, Subscription } from './types';
 import { Dashboard } from './components/Dashboard';
 import { TransactionForm } from './components/TransactionForm';
 import { TransactionList } from './components/TransactionList';
+import { SubscriptionForm } from './components/SubscriptionForm';
+import { SubscriptionList } from './components/SubscriptionList';
 import { FinancialCoach } from './components/FinancialCoach';
-import { LayoutDashboard, Receipt, Sparkles, PlusCircle, ShieldCheck, CloudOff, LogIn, LogOut, User } from 'lucide-react';
-import { fetchTransactions, addTransactionToSheet, deleteTransactionFromSheet, initAuth, isAuthenticated, getUserEmail, login, logout } from './services/sheetService';
+import { LayoutDashboard, Receipt, Sparkles, PlusCircle, ShieldCheck, CloudOff, LogIn, LogOut, User, RefreshCw } from 'lucide-react';
+import {
+  fetchTransactions, addTransactionToSheet, deleteTransactionFromSheet,
+  fetchSubscriptions, addSubscriptionToSheet, updateSubscriptionInSheet, deleteSubscriptionFromSheet,
+  initAuth, isAuthenticated, getUserEmail, login, logout
+} from './services/sheetService';
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'coach'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'transactions' | 'subscriptions' | 'coach'>('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showAddSubModal, setShowAddSubModal] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -36,8 +44,12 @@ const App: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const data = await fetchTransactions();
-      setTransactions(data || []);
+      const [transData, subData] = await Promise.all([
+        fetchTransactions(),
+        fetchSubscriptions()
+      ]);
+      setTransactions(transData || []);
+      setSubscriptions(subData || []);
     } catch (e) {
       console.error("Failed to load data", e);
     } finally {
@@ -54,6 +66,7 @@ const App: React.FC = () => {
     setIsLoggedIn(false);
     setUserEmail(null);
     setTransactions([]);
+    setSubscriptions([]);
   };
 
   const handleAddTransaction = async (t: Transaction) => {
@@ -73,12 +86,50 @@ const App: React.FC = () => {
   const handleDeleteTransaction = async (id: string) => {
     // 1. Optimistic Update
     setTransactions(prev => prev.filter(t => t.id !== id));
-    
+
     // 2. Persist to Sheet
     try {
         await deleteTransactionFromSheet(id);
     } catch (e) {
         console.error("Failed to delete from sheet", e);
+    }
+  };
+
+  // Subscription handlers
+  const handleAddSubscription = async (s: Subscription) => {
+    setSubscriptions(prev => [s, ...prev]);
+    setShowAddSubModal(false);
+
+    try {
+      await addSubscriptionToSheet(s);
+    } catch (e) {
+      console.error("Failed to save subscription", e);
+    }
+  };
+
+  const handleToggleSubscription = async (id: string) => {
+    const sub = subscriptions.find(s => s.id === id);
+    if (!sub) return;
+
+    const newStatus = !sub.isActive;
+    setSubscriptions(prev => prev.map(s =>
+      s.id === id ? { ...s, isActive: newStatus } : s
+    ));
+
+    try {
+      await updateSubscriptionInSheet(id, { isActive: newStatus });
+    } catch (e) {
+      console.error("Failed to update subscription", e);
+    }
+  };
+
+  const handleDeleteSubscription = async (id: string) => {
+    setSubscriptions(prev => prev.filter(s => s.id !== id));
+
+    try {
+      await deleteSubscriptionFromSheet(id);
+    } catch (e) {
+      console.error("Failed to delete subscription", e);
     }
   };
 
@@ -152,17 +203,24 @@ const App: React.FC = () => {
           
           <div className="flex items-center gap-2">
             <nav className="hidden md:flex items-center gap-1">
-              <button 
+              <button
                   onClick={() => setActiveTab('dashboard')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'dashboard' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
               >
                   Dashboard
               </button>
-              <button 
+              <button
                   onClick={() => setActiveTab('transactions')}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'transactions' ? 'bg-slate-100 text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
               >
                   Transactions
+              </button>
+              <button
+                  onClick={() => setActiveTab('subscriptions')}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${activeTab === 'subscriptions' ? 'bg-violet-50 text-violet-700' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                  <RefreshCw size={16} className={activeTab === 'subscriptions' ? 'text-violet-500' : 'text-slate-400'} />
+                  Subscriptions
               </button>
               <button
                   onClick={() => setActiveTab('coach')}
@@ -206,21 +264,19 @@ const App: React.FC = () => {
       {/* Mobile Tab Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-50 flex justify-around p-3 pb-safe">
         <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-slate-400'}`}>
-            <LayoutDashboard size={24} />
+            <LayoutDashboard size={20} />
             <span className="text-[10px] font-medium">Home</span>
         </button>
-        <button onClick={() => setShowAddModal(true)} className="flex flex-col items-center gap-1 text-blue-600 -mt-6">
-            <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center shadow-lg shadow-blue-600/30 text-white">
-                <PlusCircle size={24} />
-            </div>
-            <span className="text-[10px] font-medium">Add</span>
-        </button>
         <button onClick={() => setActiveTab('transactions')} className={`flex flex-col items-center gap-1 ${activeTab === 'transactions' ? 'text-blue-600' : 'text-slate-400'}`}>
-            <Receipt size={24} />
-            <span className="text-[10px] font-medium">List</span>
+            <Receipt size={20} />
+            <span className="text-[10px] font-medium">Txns</span>
+        </button>
+        <button onClick={() => setActiveTab('subscriptions')} className={`flex flex-col items-center gap-1 ${activeTab === 'subscriptions' ? 'text-violet-600' : 'text-slate-400'}`}>
+            <RefreshCw size={20} />
+            <span className="text-[10px] font-medium">Subs</span>
         </button>
         <button onClick={() => setActiveTab('coach')} className={`flex flex-col items-center gap-1 ${activeTab === 'coach' ? 'text-teal-600' : 'text-slate-400'}`}>
-            <Sparkles size={24} />
+            <Sparkles size={20} />
             <span className="text-[10px] font-medium">Coach</span>
         </button>
       </div>
@@ -235,7 +291,7 @@ const App: React.FC = () => {
 
         {activeTab === 'dashboard' && (
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <Dashboard transactions={transactions} />
+                <Dashboard transactions={transactions} subscriptions={subscriptions} />
             </div>
         )}
 
@@ -278,6 +334,46 @@ const App: React.FC = () => {
             </div>
         )}
 
+        {activeTab === 'subscriptions' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="hidden md:flex justify-between items-center">
+                    <h2 className="text-xl font-bold text-slate-900">Recurring Subscriptions</h2>
+                    <button
+                        onClick={() => setShowAddSubModal(!showAddSubModal)}
+                        className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors shadow-sm"
+                    >
+                        {showAddSubModal ? 'Cancel' : 'Add Subscription'}
+                    </button>
+                </div>
+
+                {/* Mobile Add Button */}
+                <div className="md:hidden">
+                    <button
+                        onClick={() => setShowAddSubModal(true)}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-violet-600 text-white rounded-lg hover:bg-violet-700 transition-colors shadow-sm"
+                    >
+                        <PlusCircle size={18} />
+                        Add Subscription
+                    </button>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div className={`lg:col-span-3 ${showAddSubModal ? 'lg:col-span-2' : ''}`}>
+                        <SubscriptionList
+                            subscriptions={subscriptions}
+                            onDelete={handleDeleteSubscription}
+                            onToggleActive={handleToggleSubscription}
+                        />
+                    </div>
+                    {showAddSubModal && (
+                        <div className="hidden lg:block lg:col-span-1 animate-in slide-in-from-right-8 fade-in duration-300">
+                            <SubscriptionForm onAddSubscription={handleAddSubscription} />
+                        </div>
+                    )}
+                </div>
+            </div>
+        )}
+
         {activeTab === 'coach' && (
             <div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <FinancialCoach transactions={transactions} />
@@ -299,7 +395,7 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Mobile Add Modal */}
+      {/* Mobile Add Transaction Modal */}
       {showAddModal && activeTab !== 'transactions' && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 md:hidden backdrop-blur-sm">
             <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -309,6 +405,21 @@ const App: React.FC = () => {
                 </div>
                 <div className="p-4">
                     <TransactionForm onAddTransaction={handleAddTransaction} />
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* Mobile Add Subscription Modal */}
+      {showAddSubModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 lg:hidden backdrop-blur-sm">
+            <div className="w-full max-w-sm bg-white rounded-2xl overflow-hidden animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100 sticky top-0 bg-white">
+                    <h3 className="font-bold text-slate-900">Add Subscription</h3>
+                    <button onClick={() => setShowAddSubModal(false)} className="text-slate-400 hover:text-slate-600">Close</button>
+                </div>
+                <div className="p-4">
+                    <SubscriptionForm onAddSubscription={handleAddSubscription} />
                 </div>
             </div>
         </div>

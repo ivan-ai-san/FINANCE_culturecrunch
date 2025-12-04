@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
-import { Transaction, TransactionType } from '../types';
+import { Transaction, TransactionType, Subscription, BillingFrequency } from '../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, FileText } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, FileText, RefreshCw } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
+  subscriptions?: Subscription[];
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ transactions, subscriptions = [] }) => {
   const summary = useMemo(() => {
     return transactions.reduce((acc, t) => {
       if (t.type === TransactionType.INCOME) {
@@ -23,6 +24,34 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
 
   const profit = summary.revenue - summary.expenses;
   const gstPayable = summary.gstCollected - summary.gstPaid;
+
+  // Calculate monthly subscription costs
+  const subscriptionSummary = useMemo(() => {
+    const activeSubscriptions = subscriptions.filter(s => s.isActive);
+
+    let monthlyTotal = 0;
+    let annualTotal = 0;
+    let monthlyGST = 0;
+
+    activeSubscriptions.forEach(s => {
+      if (s.frequency === BillingFrequency.MONTHLY) {
+        monthlyTotal += s.amount;
+        monthlyGST += s.gstAmount;
+      } else {
+        // Annual - convert to monthly
+        monthlyTotal += s.amount / 12;
+        monthlyGST += s.gstAmount / 12;
+        annualTotal += s.amount;
+      }
+    });
+
+    return {
+      monthlyTotal,
+      annualTotal,
+      monthlyGST,
+      count: activeSubscriptions.length
+    };
+  }, [subscriptions]);
 
   const chartData = useMemo(() => {
     // Group last 6 months
@@ -108,6 +137,45 @@ export const Dashboard: React.FC<DashboardProps> = ({ transactions }) => {
           <p className="text-xs text-slate-400 relative z-10">GST Collected - GST Paid</p>
         </div>
       </div>
+
+      {/* Subscription Summary */}
+      {subscriptions.length > 0 && (
+        <div className="bg-gradient-to-br from-violet-50 to-purple-50 p-5 rounded-xl border border-violet-200 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <RefreshCw size={18} className="text-violet-600" />
+            <h4 className="text-sm font-semibold text-slate-800">Recurring Subscriptions</h4>
+            <span className="ml-auto text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">
+              {subscriptionSummary.count} active
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Monthly Cost</p>
+              <p className="text-lg font-bold text-slate-900">
+                ${subscriptionSummary.monthlyTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Annual Projection</p>
+              <p className="text-lg font-bold text-slate-900">
+                ${(subscriptionSummary.monthlyTotal * 12).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Monthly GST</p>
+              <p className="text-lg font-bold text-slate-900">
+                ${subscriptionSummary.monthlyGST.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">vs Expenses</p>
+              <p className="text-lg font-bold text-violet-600">
+                {summary.expenses > 0 ? ((subscriptionSummary.monthlyTotal / summary.expenses) * 100).toFixed(1) : 0}%
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <h4 className="text-sm font-semibold text-slate-800 mb-6">Cash Flow (Last 6 Months)</h4>

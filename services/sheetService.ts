@@ -1,4 +1,4 @@
-import { Transaction } from '../types';
+import { Transaction, Subscription } from '../types';
 
 // Auth state management
 interface AuthState {
@@ -95,6 +95,7 @@ export const logout = (): void => {
   };
   localStorage.removeItem('cc_auth');
   localStorage.removeItem('cc_transactions');
+  localStorage.removeItem('cc_subscriptions');
 };
 
 /**
@@ -206,4 +207,98 @@ export const deleteTransactionFromSheet = async (id: string): Promise<void> => {
   const transactions = saved ? JSON.parse(saved) : [];
   const filtered = transactions.filter((t: Transaction) => t.id !== id);
   localStorage.setItem('cc_transactions', JSON.stringify(filtered));
+};
+
+// ============================================
+// SUBSCRIPTION FUNCTIONS
+// ============================================
+
+/**
+ * Fetch all subscriptions from Google Sheet
+ */
+export const fetchSubscriptions = async (): Promise<Subscription[]> => {
+  if (!isAuthenticated()) {
+    console.warn("Not authenticated - using local cache for subscriptions");
+    const saved = localStorage.getItem('cc_subscriptions');
+    return saved ? JSON.parse(saved) : [];
+  }
+
+  try {
+    const subscriptions = await apiRequest('GET', '/api/subscriptions');
+    localStorage.setItem('cc_subscriptions', JSON.stringify(subscriptions));
+    return subscriptions;
+  } catch (e) {
+    console.error("Subscriptions API Error:", e);
+    const saved = localStorage.getItem('cc_subscriptions');
+    return saved ? JSON.parse(saved) : [];
+  }
+};
+
+/**
+ * Add a subscription to Google Sheet
+ */
+export const addSubscriptionToSheet = async (s: Subscription): Promise<void> => {
+  if (!isAuthenticated()) {
+    console.log("Not authenticated - subscription saved locally only", s);
+    const saved = localStorage.getItem('cc_subscriptions');
+    const subscriptions = saved ? JSON.parse(saved) : [];
+    subscriptions.push(s);
+    localStorage.setItem('cc_subscriptions', JSON.stringify(subscriptions));
+    return;
+  }
+
+  await apiRequest('POST', '/api/subscriptions', s);
+
+  const saved = localStorage.getItem('cc_subscriptions');
+  const subscriptions = saved ? JSON.parse(saved) : [];
+  subscriptions.push(s);
+  localStorage.setItem('cc_subscriptions', JSON.stringify(subscriptions));
+};
+
+/**
+ * Update a subscription in Google Sheet
+ */
+export const updateSubscriptionInSheet = async (id: string, updates: Partial<Subscription>): Promise<void> => {
+  if (!isAuthenticated()) {
+    console.log("Not authenticated - updating locally only", id, updates);
+    const saved = localStorage.getItem('cc_subscriptions');
+    const subscriptions: Subscription[] = saved ? JSON.parse(saved) : [];
+    const index = subscriptions.findIndex(s => s.id === id);
+    if (index !== -1) {
+      subscriptions[index] = { ...subscriptions[index], ...updates };
+      localStorage.setItem('cc_subscriptions', JSON.stringify(subscriptions));
+    }
+    return;
+  }
+
+  await apiRequest('PUT', `/api/subscriptions?id=${encodeURIComponent(id)}`, updates);
+
+  const saved = localStorage.getItem('cc_subscriptions');
+  const subscriptions: Subscription[] = saved ? JSON.parse(saved) : [];
+  const index = subscriptions.findIndex(s => s.id === id);
+  if (index !== -1) {
+    subscriptions[index] = { ...subscriptions[index], ...updates };
+    localStorage.setItem('cc_subscriptions', JSON.stringify(subscriptions));
+  }
+};
+
+/**
+ * Delete a subscription from Google Sheet
+ */
+export const deleteSubscriptionFromSheet = async (id: string): Promise<void> => {
+  if (!isAuthenticated()) {
+    console.log("Not authenticated - deleting locally only", id);
+    const saved = localStorage.getItem('cc_subscriptions');
+    const subscriptions = saved ? JSON.parse(saved) : [];
+    const filtered = subscriptions.filter((s: Subscription) => s.id !== id);
+    localStorage.setItem('cc_subscriptions', JSON.stringify(filtered));
+    return;
+  }
+
+  await apiRequest('DELETE', `/api/subscriptions?id=${encodeURIComponent(id)}`);
+
+  const saved = localStorage.getItem('cc_subscriptions');
+  const subscriptions = saved ? JSON.parse(saved) : [];
+  const filtered = subscriptions.filter((s: Subscription) => s.id !== id);
+  localStorage.setItem('cc_subscriptions', JSON.stringify(filtered));
 };
