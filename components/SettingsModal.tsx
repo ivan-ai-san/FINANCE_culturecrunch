@@ -1,0 +1,1 @@
+// File deleted as connection is now internal via Google Apps Script
