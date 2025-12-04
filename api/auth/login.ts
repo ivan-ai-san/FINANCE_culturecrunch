@@ -2,10 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const getRedirectUri = (req: VercelRequest) => {
-  if (process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}/api/auth/callback/google`;
-  }
-  // For local dev, use the host from the request
+  // Always use the request host to get the correct domain
   const host = req.headers.host || 'localhost:3000';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   return `${protocol}://${host}/api/auth/callback/google`;
